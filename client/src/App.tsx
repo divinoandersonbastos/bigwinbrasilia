@@ -6,6 +6,12 @@ import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import Home from "./pages/Home";
 
+/*
+ * App Configuration
+ * Design: Swiss Minimalist Mathematical
+ * Theme: Light (clean, professional, data-focused)
+ */
+
 
 function Router() {
   return (
