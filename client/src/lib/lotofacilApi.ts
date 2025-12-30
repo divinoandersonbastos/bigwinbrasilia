@@ -207,3 +207,170 @@ export function getMatchingNumbers(
   const resultSet = new Set(resultNumbers);
   return gameNumbers.filter(n => resultSet.has(n));
 }
+
+
+/**
+ * Frequency Analysis Types and Functions
+ */
+
+export interface FrequencyData {
+  number: number;
+  count: number;
+  percentage: number;
+  lastAppearance: number; // contest number
+  streak: number; // consecutive appearances or absences
+  isHot: boolean;
+  isCold: boolean;
+}
+
+export interface FrequencyAnalysis {
+  frequencies: FrequencyData[];
+  totalContests: number;
+  latestContest: number;
+  hotNumbers: number[];
+  coldNumbers: number[];
+  averageFrequency: number;
+}
+
+// Cache for frequency analysis
+let frequencyCache: { data: FrequencyAnalysis; timestamp: number } | null = null;
+const FREQUENCY_CACHE_DURATION = 10 * 60 * 1000; // 10 minutes
+
+/**
+ * Analyze frequency of numbers across recent results
+ */
+export async function analyzeFrequency(contestCount: number = 50): Promise<FrequencyAnalysis> {
+  // Check cache
+  if (frequencyCache && Date.now() - frequencyCache.timestamp < FREQUENCY_CACHE_DURATION) {
+    return frequencyCache.data;
+  }
+
+  try {
+    const results = await fetchRecentResults(contestCount);
+    
+    // Initialize frequency map for all 25 numbers
+    const frequencyMap = new Map<number, { count: number; lastAppearance: number; appearances: number[] }>();
+    for (let i = 1; i <= 25; i++) {
+      frequencyMap.set(i, { count: 0, lastAppearance: 0, appearances: [] });
+    }
+    
+    // Count frequencies
+    results.forEach((result, index) => {
+      const contestNumber = result.numero;
+      result.listaDezenas.forEach(d => {
+        const num = parseInt(d, 10);
+        const data = frequencyMap.get(num)!;
+        data.count++;
+        if (data.lastAppearance === 0) {
+          data.lastAppearance = contestNumber;
+        }
+        data.appearances.push(index);
+      });
+    });
+    
+    const latestContest = results[0]?.numero || 0;
+    const totalContests = results.length;
+    const expectedFrequency = (15 / 25) * totalContests; // Expected appearances
+    
+    // Calculate frequencies and classify hot/cold
+    const frequencies: FrequencyData[] = [];
+    
+    for (let num = 1; num <= 25; num++) {
+      const data = frequencyMap.get(num)!;
+      const percentage = (data.count / totalContests) * 100;
+      
+      // Calculate streak (consecutive appearances or absences from most recent)
+      let streak = 0;
+      const wasInLast = data.appearances.includes(0);
+      
+      if (wasInLast) {
+        // Count consecutive appearances
+        for (let i = 0; i < data.appearances.length; i++) {
+          if (data.appearances.includes(i)) {
+            streak++;
+          } else {
+            break;
+          }
+        }
+      } else {
+        // Count consecutive absences
+        for (let i = 0; i < totalContests; i++) {
+          if (!data.appearances.includes(i)) {
+            streak--;
+          } else {
+            break;
+          }
+        }
+      }
+      
+      frequencies.push({
+        number: num,
+        count: data.count,
+        percentage,
+        lastAppearance: data.lastAppearance,
+        streak,
+        isHot: data.count >= expectedFrequency * 1.15, // 15% above average
+        isCold: data.count <= expectedFrequency * 0.85, // 15% below average
+      });
+    }
+    
+    // Sort by frequency (descending)
+    frequencies.sort((a, b) => b.count - a.count);
+    
+    const hotNumbers = frequencies.filter(f => f.isHot).map(f => f.number);
+    const coldNumbers = frequencies.filter(f => f.isCold).map(f => f.number);
+    const averageFrequency = frequencies.reduce((sum, f) => sum + f.count, 0) / 25;
+    
+    const analysis: FrequencyAnalysis = {
+      frequencies,
+      totalContests,
+      latestContest,
+      hotNumbers,
+      coldNumbers,
+      averageFrequency,
+    };
+    
+    // Cache the result
+    frequencyCache = { data: analysis, timestamp: Date.now() };
+    
+    return analysis;
+  } catch (error) {
+    console.error('Error analyzing frequency:', error);
+    throw error;
+  }
+}
+
+/**
+ * Get frequency data for a specific number
+ */
+export function getNumberFrequency(analysis: FrequencyAnalysis, number: number): FrequencyData | undefined {
+  return analysis.frequencies.find(f => f.number === number);
+}
+
+/**
+ * Get top N hot numbers
+ */
+export function getTopHotNumbers(analysis: FrequencyAnalysis, count: number = 10): number[] {
+  return analysis.frequencies
+    .slice(0, count)
+    .map(f => f.number);
+}
+
+/**
+ * Get top N cold numbers
+ */
+export function getTopColdNumbers(analysis: FrequencyAnalysis, count: number = 10): number[] {
+  return [...analysis.frequencies]
+    .sort((a, b) => a.count - b.count)
+    .slice(0, count)
+    .map(f => f.number);
+}
+
+/**
+ * Calculate delay (how many contests since last appearance)
+ */
+export function calculateDelay(analysis: FrequencyAnalysis, number: number): number {
+  const freq = analysis.frequencies.find(f => f.number === number);
+  if (!freq || freq.lastAppearance === 0) return 0;
+  return analysis.latestContest - freq.lastAppearance;
+}

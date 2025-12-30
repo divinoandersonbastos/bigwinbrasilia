@@ -1,7 +1,7 @@
 /*
  * Home Page - Lotofácil Generator
  * Design: Swiss Minimalist Mathematical
- * Features: Number selection, game generation, statistical filters, statistics display, history
+ * Features: Number selection, game generation, statistical filters, statistics display, history, frequency analysis
  */
 
 import { useState, useMemo } from "react";
@@ -12,6 +12,7 @@ import { NumberSelector } from "@/components/NumberSelector";
 import { GameCard } from "@/components/GameCard";
 import { FilterPanel } from "@/components/FilterPanel";
 import { HistoryPanel } from "@/components/HistoryPanel";
+import { FrequencyAnalysis } from "@/components/FrequencyAnalysis";
 import { useHistory, type HistoryEntry } from "@/hooks/useHistory";
 import { 
   generateFilteredGames, 
@@ -44,6 +45,14 @@ export default function Home() {
       if (prev.length >= 18) return prev;
       return [...prev, num];
     });
+    setAllGames([]);
+    setFilteredGames([]);
+    setRejectedCount(0);
+    setLastSavedId(null);
+  };
+
+  const handleSelectNumbers = (numbers: number[]) => {
+    setSelectedNumbers(numbers.sort((a, b) => a - b));
     setAllGames([]);
     setFilteredGames([]);
     setRejectedCount(0);
@@ -283,6 +292,9 @@ export default function Home() {
                 </motion.div>
               )}
             </AnimatePresence>
+
+            {/* Frequency Analysis Section */}
+            <FrequencyAnalysis onSelectNumbers={handleSelectNumbers} />
           </div>
 
           {/* Right Column - Filters, History & Statistics */}
@@ -378,6 +390,9 @@ export default function Home() {
                 </p>
                 <p>
                   Os <strong className="text-foreground">filtros estatísticos</strong> permitem refinar os jogos com base em padrões históricos da Lotofácil.
+                </p>
+                <p>
+                  A <strong className="text-foreground">análise de frequência</strong> mostra quais números são mais ou menos sorteados.
                 </p>
                 <p>
                   O <strong className="text-foreground">histórico</strong> salva automaticamente todos os jogos gerados no seu navegador.
