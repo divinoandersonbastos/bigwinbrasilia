@@ -218,9 +218,11 @@ export interface FrequencyData {
   count: number;
   percentage: number;
   lastAppearance: number; // contest number
+  delay: number; // how many contests since last appearance
   streak: number; // consecutive appearances or absences
   isHot: boolean;
   isCold: boolean;
+  isDelayed: boolean; // true if delay is above average
 }
 
 export interface FrequencyAnalysis {
@@ -229,7 +231,10 @@ export interface FrequencyAnalysis {
   latestContest: number;
   hotNumbers: number[];
   coldNumbers: number[];
+  delayedNumbers: number[];
   averageFrequency: number;
+  averageDelay: number;
+  maxDelay: number;
 }
 
 // Cache for frequency analysis
@@ -303,14 +308,19 @@ export async function analyzeFrequency(contestCount: number = 50): Promise<Frequ
         }
       }
       
+      // Calculate delay
+      const delay = data.lastAppearance > 0 ? latestContest - data.lastAppearance : totalContests;
+      
       frequencies.push({
         number: num,
         count: data.count,
         percentage,
         lastAppearance: data.lastAppearance,
+        delay,
         streak,
         isHot: data.count >= expectedFrequency * 1.15, // 15% above average
         isCold: data.count <= expectedFrequency * 0.85, // 15% below average
+        isDelayed: false, // will be set after calculating average delay
       });
     }
     
@@ -321,13 +331,28 @@ export async function analyzeFrequency(contestCount: number = 50): Promise<Frequ
     const coldNumbers = frequencies.filter(f => f.isCold).map(f => f.number);
     const averageFrequency = frequencies.reduce((sum, f) => sum + f.count, 0) / 25;
     
+    // Calculate delay statistics
+    const totalDelay = frequencies.reduce((sum, f) => sum + f.delay, 0);
+    const averageDelay = totalDelay / 25;
+    const maxDelay = Math.max(...frequencies.map(f => f.delay));
+    
+    // Mark delayed numbers (above average delay)
+    frequencies.forEach(f => {
+      f.isDelayed = f.delay >= averageDelay * 1.5; // 50% above average delay
+    });
+    
+    const delayedNumbers = frequencies.filter(f => f.isDelayed).map(f => f.number);
+    
     const analysis: FrequencyAnalysis = {
       frequencies,
       totalContests,
       latestContest,
       hotNumbers,
       coldNumbers,
+      delayedNumbers,
       averageFrequency,
+      averageDelay,
+      maxDelay,
     };
     
     // Cache the result
@@ -373,4 +398,30 @@ export function calculateDelay(analysis: FrequencyAnalysis, number: number): num
   const freq = analysis.frequencies.find(f => f.number === number);
   if (!freq || freq.lastAppearance === 0) return 0;
   return analysis.latestContest - freq.lastAppearance;
+}
+
+
+/**
+ * Get numbers sorted by delay (highest delay first)
+ */
+export function getNumbersByDelay(analysis: FrequencyAnalysis, count: number = 18): number[] {
+  return [...analysis.frequencies]
+    .sort((a, b) => b.delay - a.delay)
+    .slice(0, count)
+    .map(f => f.number);
+}
+
+/**
+ * Get numbers that are "due" (high delay + cold)
+ */
+export function getDueNumbers(analysis: FrequencyAnalysis, count: number = 18): number[] {
+  return [...analysis.frequencies]
+    .sort((a, b) => {
+      // Score based on delay and being cold
+      const scoreA = a.delay * (a.isCold ? 1.5 : 1);
+      const scoreB = b.delay * (b.isCold ? 1.5 : 1);
+      return scoreB - scoreA;
+    })
+    .slice(0, count)
+    .map(f => f.number);
 }

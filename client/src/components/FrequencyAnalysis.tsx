@@ -1,13 +1,12 @@
 /*
  * FrequencyAnalysis Component
  * Design: Swiss Minimalist Mathematical
- * Purpose: Display frequency analysis of lottery numbers
+ * Purpose: Display frequency analysis and delay statistics of lottery numbers
  */
 
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -24,6 +23,7 @@ import {
 } from "@/components/ui/select";
 import {
   analyzeFrequency,
+  getNumbersByDelay,
   type FrequencyAnalysis as FrequencyAnalysisType,
   type FrequencyData,
 } from "@/lib/lotofacilApi";
@@ -37,7 +37,9 @@ import {
   Loader2,
   AlertCircle,
   Info,
-  Hash
+  Hash,
+  Clock,
+  Hourglass
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -50,7 +52,6 @@ export function FrequencyAnalysis({ onSelectNumbers }: FrequencyAnalysisProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [contestCount, setContestCount] = useState<string>('50');
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
 
   useEffect(() => {
     loadAnalysis();
@@ -96,7 +97,6 @@ export function FrequencyAnalysis({ onSelectNumbers }: FrequencyAnalysisProps) {
 
   const selectBalanced = () => {
     if (analysis && onSelectNumbers) {
-      // Select 9 hot and 9 cold for balance
       const hot = analysis.frequencies.slice(0, 9).map(f => f.number);
       const cold = [...analysis.frequencies]
         .sort((a, b) => a.count - b.count)
@@ -108,9 +108,25 @@ export function FrequencyAnalysis({ onSelectNumbers }: FrequencyAnalysisProps) {
     }
   };
 
+  const selectDelayedNumbers = () => {
+    if (analysis && onSelectNumbers) {
+      const delayed = getNumbersByDelay(analysis, 18);
+      onSelectNumbers(delayed);
+      toast.success('18 números com maior atraso selecionados');
+    }
+  };
+
   const getFrequencyColor = (freq: FrequencyData): string => {
     if (freq.isHot) return 'bg-red-500 text-white';
     if (freq.isCold) return 'bg-blue-500 text-white';
+    return 'bg-muted text-foreground';
+  };
+
+  const getDelayColor = (freq: FrequencyData, maxDelay: number): string => {
+    if (freq.delay === 0) return 'bg-green-500 text-white';
+    if (freq.isDelayed) return 'bg-amber-500 text-white';
+    const intensity = Math.min(freq.delay / maxDelay, 1);
+    if (intensity > 0.5) return 'bg-orange-400 text-white';
     return 'bg-muted text-foreground';
   };
 
@@ -191,27 +207,34 @@ export function FrequencyAnalysis({ onSelectNumbers }: FrequencyAnalysisProps) {
         {analysis && (
           <>
             {/* Summary Stats */}
-            <div className="grid grid-cols-3 gap-3">
-              <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20">
-                <div className="flex items-center gap-1 text-xs text-red-600 mb-1">
+            <div className="grid grid-cols-4 gap-2">
+              <div className="p-2 rounded-lg bg-red-500/10 border border-red-500/20">
+                <div className="flex items-center gap-1 text-[10px] text-red-600 mb-0.5">
                   <Flame className="w-3 h-3" />
                   Quentes
                 </div>
-                <p className="text-lg font-mono font-semibold">{analysis.hotNumbers.length}</p>
+                <p className="text-base font-mono font-semibold">{analysis.hotNumbers.length}</p>
               </div>
-              <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/20">
-                <div className="flex items-center gap-1 text-xs text-blue-600 mb-1">
+              <div className="p-2 rounded-lg bg-blue-500/10 border border-blue-500/20">
+                <div className="flex items-center gap-1 text-[10px] text-blue-600 mb-0.5">
                   <Snowflake className="w-3 h-3" />
                   Frios
                 </div>
-                <p className="text-lg font-mono font-semibold">{analysis.coldNumbers.length}</p>
+                <p className="text-base font-mono font-semibold">{analysis.coldNumbers.length}</p>
               </div>
-              <div className="p-3 rounded-lg bg-muted">
-                <div className="flex items-center gap-1 text-xs text-muted-foreground mb-1">
+              <div className="p-2 rounded-lg bg-amber-500/10 border border-amber-500/20">
+                <div className="flex items-center gap-1 text-[10px] text-amber-600 mb-0.5">
+                  <Clock className="w-3 h-3" />
+                  Atrasados
+                </div>
+                <p className="text-base font-mono font-semibold">{analysis.delayedNumbers.length}</p>
+              </div>
+              <div className="p-2 rounded-lg bg-muted">
+                <div className="flex items-center gap-1 text-[10px] text-muted-foreground mb-0.5">
                   <Hash className="w-3 h-3" />
                   Média
                 </div>
-                <p className="text-lg font-mono font-semibold">{analysis.averageFrequency.toFixed(1)}</p>
+                <p className="text-base font-mono font-semibold">{analysis.averageFrequency.toFixed(1)}</p>
               </div>
             </div>
 
@@ -220,11 +243,15 @@ export function FrequencyAnalysis({ onSelectNumbers }: FrequencyAnalysisProps) {
               <div className="flex flex-wrap gap-2">
                 <Button variant="outline" size="sm" onClick={selectHotNumbers} className="text-xs">
                   <Flame className="w-3 h-3 mr-1 text-red-500" />
-                  Selecionar Quentes
+                  Quentes
                 </Button>
                 <Button variant="outline" size="sm" onClick={selectColdNumbers} className="text-xs">
                   <Snowflake className="w-3 h-3 mr-1 text-blue-500" />
-                  Selecionar Frios
+                  Frios
+                </Button>
+                <Button variant="outline" size="sm" onClick={selectDelayedNumbers} className="text-xs">
+                  <Clock className="w-3 h-3 mr-1 text-amber-500" />
+                  Atrasados
                 </Button>
                 <Button variant="outline" size="sm" onClick={selectBalanced} className="text-xs">
                   <BarChart3 className="w-3 h-3 mr-1" />
@@ -234,26 +261,31 @@ export function FrequencyAnalysis({ onSelectNumbers }: FrequencyAnalysisProps) {
             )}
 
             {/* Legend */}
-            <div className="flex items-center gap-4 text-xs text-muted-foreground">
+            <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
               <div className="flex items-center gap-1">
                 <span className="w-3 h-3 rounded-full bg-red-500"></span>
-                Quente (+15%)
+                Quente
               </div>
               <div className="flex items-center gap-1">
                 <span className="w-3 h-3 rounded-full bg-blue-500"></span>
-                Frio (-15%)
+                Frio
               </div>
               <div className="flex items-center gap-1">
-                <span className="w-3 h-3 rounded-full bg-muted border"></span>
-                Normal
+                <span className="w-3 h-3 rounded-full bg-amber-500"></span>
+                Atrasado
+              </div>
+              <div className="flex items-center gap-1">
+                <span className="w-3 h-3 rounded-full bg-green-500"></span>
+                Recente
               </div>
             </div>
 
             {/* Tabs for different views */}
             <Tabs defaultValue="grid" className="w-full">
-              <TabsList className="grid w-full grid-cols-2">
+              <TabsList className="grid w-full grid-cols-3">
                 <TabsTrigger value="grid">Grade</TabsTrigger>
                 <TabsTrigger value="ranking">Ranking</TabsTrigger>
+                <TabsTrigger value="delay">Atraso</TabsTrigger>
               </TabsList>
               
               <TabsContent value="grid" className="mt-4">
@@ -287,6 +319,7 @@ export function FrequencyAnalysis({ onSelectNumbers }: FrequencyAnalysisProps) {
                           <div className="space-y-1">
                             <p className="font-semibold">Dezena {num.toString().padStart(2, '0')}</p>
                             <p>Aparições: {freq.count} ({freq.percentage.toFixed(1)}%)</p>
+                            <p>Atraso: {freq.delay} sorteio{freq.delay !== 1 ? 's' : ''}</p>
                             <p>Último sorteio: {freq.lastAppearance}</p>
                             {freq.streak > 0 && <p className="text-green-500">{freq.streak} sorteios seguidos</p>}
                             {freq.streak < 0 && <p className="text-red-500">{Math.abs(freq.streak)} sorteios ausente</p>}
@@ -332,15 +365,110 @@ export function FrequencyAnalysis({ onSelectNumbers }: FrequencyAnalysisProps) {
                   ))}
                 </div>
               </TabsContent>
+
+              <TabsContent value="delay" className="mt-4">
+                {/* Delay View - Numbers sorted by delay */}
+                <div className="space-y-3">
+                  {/* Delay Stats */}
+                  <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                    <div className="p-2 bg-muted/50 rounded-lg">
+                      <p className="text-muted-foreground">Média</p>
+                      <p className="font-mono font-semibold">{analysis.averageDelay.toFixed(1)}</p>
+                    </div>
+                    <div className="p-2 bg-muted/50 rounded-lg">
+                      <p className="text-muted-foreground">Máximo</p>
+                      <p className="font-mono font-semibold">{analysis.maxDelay}</p>
+                    </div>
+                    <div className="p-2 bg-muted/50 rounded-lg">
+                      <p className="text-muted-foreground">Atrasados</p>
+                      <p className="font-mono font-semibold">{analysis.delayedNumbers.length}</p>
+                    </div>
+                  </div>
+
+                  {/* Delay Grid */}
+                  <div className="grid grid-cols-5 gap-2">
+                    {[...Array(25)].map((_, i) => {
+                      const num = i + 1;
+                      const freq = analysis.frequencies.find(f => f.number === num);
+                      if (!freq) return null;
+                      
+                      return (
+                        <Tooltip key={num}>
+                          <TooltipTrigger asChild>
+                            <div
+                              className={`relative p-2 rounded-lg text-center cursor-help transition-all hover:scale-105 ${getDelayColor(freq, analysis.maxDelay)}`}
+                            >
+                              <span className="text-lg font-mono font-bold">
+                                {num.toString().padStart(2, '0')}
+                              </span>
+                              <div className="text-[10px] opacity-80 flex items-center justify-center gap-0.5">
+                                <Hourglass className="w-2.5 h-2.5" />
+                                {freq.delay}
+                              </div>
+                              {freq.isDelayed && (
+                                <div className="absolute top-0.5 right-0.5">
+                                  <Clock className="w-3 h-3 text-amber-200" />
+                                </div>
+                              )}
+                            </div>
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="text-xs">
+                            <div className="space-y-1">
+                              <p className="font-semibold">Dezena {num.toString().padStart(2, '0')}</p>
+                              <p>Atraso: {freq.delay} sorteio{freq.delay !== 1 ? 's' : ''}</p>
+                              <p>Último sorteio: {freq.lastAppearance || 'Não apareceu'}</p>
+                              <p>Aparições: {freq.count} ({freq.percentage.toFixed(1)}%)</p>
+                              {freq.isDelayed && <p className="text-amber-500">Acima da média de atraso</p>}
+                              {freq.delay === 0 && <p className="text-green-500">Saiu no último sorteio</p>}
+                            </div>
+                          </TooltipContent>
+                        </Tooltip>
+                      );
+                    })}
+                  </div>
+
+                  {/* Delay Ranking */}
+                  <div className="space-y-1.5 max-h-[200px] overflow-y-auto pr-2">
+                    {[...analysis.frequencies]
+                      .sort((a, b) => b.delay - a.delay)
+                      .map((freq, index) => (
+                        <div
+                          key={freq.number}
+                          className="flex items-center gap-2 p-1.5 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors"
+                        >
+                          <span className="w-5 text-[10px] text-muted-foreground font-mono">
+                            #{index + 1}
+                          </span>
+                          <span
+                            className={`w-7 h-7 flex items-center justify-center text-xs font-mono font-bold rounded-full ${getDelayColor(freq, analysis.maxDelay)}`}
+                          >
+                            {freq.number.toString().padStart(2, '0')}
+                          </span>
+                          <div className="flex-1">
+                            <Progress 
+                              value={(freq.delay / analysis.maxDelay) * 100} 
+                              className="h-1.5"
+                            />
+                          </div>
+                          <div className="flex items-center gap-1.5 min-w-[60px] justify-end">
+                            <Hourglass className="w-3 h-3 text-muted-foreground" />
+                            <span className="text-xs font-mono">{freq.delay}</span>
+                            {freq.isDelayed && <Clock className="w-3 h-3 text-amber-500" />}
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              </TabsContent>
             </Tabs>
 
             {/* Info Footer */}
             <div className="flex items-start gap-2 p-3 rounded-lg bg-muted/50 text-xs text-muted-foreground">
               <Info className="w-4 h-4 mt-0.5 flex-shrink-0" />
               <p>
-                Números <strong className="text-red-500">quentes</strong> aparecem 15% acima da média, 
-                enquanto <strong className="text-blue-500">frios</strong> aparecem 15% abaixo. 
-                A análise é baseada nos últimos {analysis.totalContests} sorteios (até o concurso {analysis.latestContest}).
+                <strong className="text-amber-500">Atrasados</strong> são números que não saem há mais de 50% acima da média. 
+                Números com <strong className="text-green-500">atraso 0</strong> saíram no último sorteio. 
+                Análise baseada nos últimos {analysis.totalContests} sorteios (até concurso {analysis.latestContest}).
               </p>
             </div>
           </>
