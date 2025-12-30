@@ -1,22 +1,34 @@
 /*
  * Home Page - Lotofácil Generator
  * Design: Swiss Minimalist Mathematical
- * Features: Number selection, game generation, statistics display
+ * Features: Number selection, game generation, statistical filters, statistics display
  */
 
 import { useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { NumberSelector } from "@/components/NumberSelector";
 import { GameCard } from "@/components/GameCard";
-import { generateGames, calculateCoverage, type GeneratedGame } from "@/lib/gameGenerator";
-import { Dices, RotateCcw, Copy, Check, Info } from "lucide-react";
+import { FilterPanel } from "@/components/FilterPanel";
+import { 
+  generateFilteredGames, 
+  calculateCoverage, 
+  type GeneratedGame, 
+  type FilterOptions,
+  DEFAULT_FILTERS,
+  getFilterDescription
+} from "@/lib/gameGenerator";
+import { Dices, RotateCcw, Copy, Check, Info, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
 
 export default function Home() {
   const [selectedNumbers, setSelectedNumbers] = useState<number[]>([]);
-  const [generatedGames, setGeneratedGames] = useState<GeneratedGame[]>([]);
+  const [allGames, setAllGames] = useState<GeneratedGame[]>([]);
+  const [filteredGames, setFilteredGames] = useState<GeneratedGame[]>([]);
+  const [rejectedCount, setRejectedCount] = useState(0);
+  const [filters, setFilters] = useState<FilterOptions>(DEFAULT_FILTERS);
   const [copied, setCopied] = useState(false);
 
   const handleToggle = (num: number) => {
@@ -27,7 +39,9 @@ export default function Home() {
       if (prev.length >= 18) return prev;
       return [...prev, num];
     });
-    setGeneratedGames([]);
+    setAllGames([]);
+    setFilteredGames([]);
+    setRejectedCount(0);
   };
 
   const handleGenerate = () => {
@@ -35,18 +49,30 @@ export default function Home() {
       toast.error("Selecione exatamente 18 dezenas");
       return;
     }
-    const games = generateGames(selectedNumbers);
-    setGeneratedGames(games);
-    toast.success("6 jogos gerados com sucesso!");
+    
+    const result = generateFilteredGames(selectedNumbers, filters);
+    setAllGames(result.allGames);
+    setFilteredGames(result.filteredGames);
+    setRejectedCount(result.rejectedCount);
+    
+    if (result.filteredGames.length === 0) {
+      toast.warning("Nenhum jogo passou nos filtros. Tente ajustar os critérios.");
+    } else if (result.rejectedCount > 0) {
+      toast.success(`${result.filteredGames.length} jogos aprovados, ${result.rejectedCount} rejeitados pelos filtros`);
+    } else {
+      toast.success(`${result.filteredGames.length} jogos gerados com sucesso!`);
+    }
   };
 
   const handleReset = () => {
     setSelectedNumbers([]);
-    setGeneratedGames([]);
+    setAllGames([]);
+    setFilteredGames([]);
+    setRejectedCount(0);
   };
 
   const handleCopyAll = () => {
-    const text = generatedGames
+    const text = filteredGames
       .map((game, i) => `Jogo ${i + 1}: ${game.numbers.map(n => n.toString().padStart(2, '0')).join(' ')}`)
       .join('\n');
     navigator.clipboard.writeText(text);
@@ -64,6 +90,15 @@ export default function Home() {
     const all = Array.from({ length: 25 }, (_, i) => i + 1);
     return all.filter(n => !selectedNumbers.includes(n));
   }, [selectedNumbers]);
+
+  const activeFiltersCount = useMemo(() => {
+    let count = 0;
+    if (filters.sumRange.enabled) count++;
+    if (filters.parityBalance.enabled) count++;
+    return count;
+  }, [filters]);
+
+  const filterDescriptions = useMemo(() => getFilterDescription(filters), [filters]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -94,7 +129,7 @@ export default function Home() {
 
       <main className="container py-8 md:py-12">
         <div className="grid lg:grid-cols-[1fr,380px] gap-8">
-          {/* Left Column - Number Selection */}
+          {/* Left Column - Number Selection & Games */}
           <div className="space-y-6">
             <Card>
               <CardHeader>
@@ -121,6 +156,11 @@ export default function Home() {
                     size="lg"
                   >
                     Gerar 6 Jogos
+                    {activeFiltersCount > 0 && (
+                      <Badge variant="secondary" className="ml-2">
+                        {activeFiltersCount} filtro{activeFiltersCount > 1 ? 's' : ''}
+                      </Badge>
+                    )}
                   </Button>
                   <Button
                     onClick={handleReset}
@@ -135,7 +175,7 @@ export default function Home() {
 
             {/* Generated Games */}
             <AnimatePresence mode="wait">
-              {generatedGames.length > 0 && (
+              {allGames.length > 0 && (
                 <motion.div
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -143,41 +183,76 @@ export default function Home() {
                   transition={{ duration: 0.3 }}
                 >
                   <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-xl font-semibold">Jogos Gerados</h2>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleCopyAll}
-                      className="gap-2"
-                    >
-                      {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                      {copied ? "Copiado!" : "Copiar Todos"}
-                    </Button>
+                    <div className="space-y-1">
+                      <h2 className="text-xl font-semibold">Jogos Gerados</h2>
+                      {rejectedCount > 0 && (
+                        <p className="text-sm text-muted-foreground flex items-center gap-1">
+                          <AlertTriangle className="w-3 h-3" />
+                          {rejectedCount} jogo{rejectedCount > 1 ? 's' : ''} rejeitado{rejectedCount > 1 ? 's' : ''} pelos filtros
+                        </p>
+                      )}
+                      {filterDescriptions.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {filterDescriptions.map((desc, i) => (
+                            <Badge key={i} variant="outline" className="text-xs font-mono">
+                              {desc}
+                            </Badge>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    {filteredGames.length > 0 && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleCopyAll}
+                        className="gap-2"
+                      >
+                        {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                        {copied ? "Copiado!" : "Copiar Todos"}
+                      </Button>
+                    )}
                   </div>
                   
-                  <div className="grid sm:grid-cols-2 gap-4">
-                    {generatedGames.map((game, index) => (
-                      <motion.div
-                        key={index}
-                        initial={{ opacity: 0, scale: 0.95 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        transition={{ duration: 0.2, delay: index * 0.05 }}
-                      >
-                        <GameCard
-                          gameNumber={index + 1}
-                          numbers={game.numbers}
-                          stats={game.stats}
-                        />
-                      </motion.div>
-                    ))}
-                  </div>
+                  {filteredGames.length > 0 ? (
+                    <div className="grid sm:grid-cols-2 gap-4">
+                      {filteredGames.map((game, index) => (
+                        <motion.div
+                          key={index}
+                          initial={{ opacity: 0, scale: 0.95 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          transition={{ duration: 0.2, delay: index * 0.05 }}
+                        >
+                          <GameCard
+                            gameNumber={index + 1}
+                            numbers={game.numbers}
+                            stats={game.stats}
+                          />
+                        </motion.div>
+                      ))}
+                    </div>
+                  ) : (
+                    <Card className="border-destructive/50 bg-destructive/5">
+                      <CardContent className="py-8 text-center">
+                        <AlertTriangle className="w-10 h-10 text-destructive mx-auto mb-3" />
+                        <h3 className="font-semibold mb-1">Nenhum jogo aprovado</h3>
+                        <p className="text-sm text-muted-foreground">
+                          Todos os 6 jogos foram rejeitados pelos filtros ativos. 
+                          Tente ajustar os critérios de soma ou paridade.
+                        </p>
+                      </CardContent>
+                    </Card>
+                  )}
                 </motion.div>
               )}
             </AnimatePresence>
           </div>
 
-          {/* Right Column - Statistics */}
+          {/* Right Column - Filters & Statistics */}
           <aside className="space-y-6">
+            {/* Filters Panel */}
+            <FilterPanel filters={filters} onFiltersChange={setFilters} />
+
             {/* Removed Numbers */}
             <Card>
               <CardHeader className="pb-3">
@@ -220,11 +295,15 @@ export default function Home() {
                   <CardContent className="space-y-4">
                     <div className="grid grid-cols-2 gap-4">
                       <div className="text-center p-3 bg-muted rounded-lg">
-                        <p className="text-2xl font-mono font-bold text-primary">6</p>
+                        <p className="text-2xl font-mono font-bold text-primary">
+                          {filteredGames.length || 6}
+                        </p>
                         <p className="text-xs text-muted-foreground uppercase">Jogos</p>
                       </div>
                       <div className="text-center p-3 bg-muted rounded-lg">
-                        <p className="text-2xl font-mono font-bold">R$ 18</p>
+                        <p className="text-2xl font-mono font-bold">
+                          R$ {(filteredGames.length || 6) * 3}
+                        </p>
                         <p className="text-xs text-muted-foreground uppercase">Custo Total</p>
                       </div>
                     </div>
@@ -253,11 +332,11 @@ export default function Home() {
                   O sistema de <strong className="text-foreground">fechamento</strong> distribui suas 18 dezenas em 6 jogos de forma otimizada.
                 </p>
                 <p>
-                  Cada número aparece em média <strong className="text-foreground">5 jogos</strong>, garantindo alta cobertura com baixo investimento.
+                  Os <strong className="text-foreground">filtros estatísticos</strong> permitem refinar os jogos com base em padrões históricos da Lotofácil.
                 </p>
                 <p>
-                  Desdobramento completo de 18 números = <strong className="text-foreground">816 jogos</strong>. 
-                  Este fechamento reduz para apenas <strong className="text-foreground">6 jogos</strong>.
+                  <strong className="text-foreground">Faixa de soma ideal:</strong> 180-220 pontos. 
+                  <strong className="text-foreground"> Paridade ideal:</strong> 6-9 pares.
                 </p>
               </CardContent>
             </Card>
