@@ -4,7 +4,7 @@
  * Based on mathematical coverage optimization
  * 
  * Design: Swiss Minimalist Mathematical
- * Features: Wheeling matrix, statistical filters (sum range, parity balance)
+ * Features: Wheeling matrix, statistical filters (sum range, parity balance, primes count)
  */
 
 const PRIMES = new Set([2, 3, 5, 7, 11, 13, 17, 19, 23]);
@@ -32,6 +32,11 @@ export interface FilterOptions {
     minEvens: number;
     maxEvens: number;
   };
+  primesCount: {
+    enabled: boolean;
+    min: number;
+    max: number;
+  };
 }
 
 export const DEFAULT_FILTERS: FilterOptions = {
@@ -44,6 +49,11 @@ export const DEFAULT_FILTERS: FilterOptions = {
     enabled: false,
     minEvens: 6,
     maxEvens: 9,
+  },
+  primesCount: {
+    enabled: false,
+    min: 4,
+    max: 7,
   },
 };
 
@@ -59,7 +69,15 @@ export const STATISTICAL_RANGES = {
     max: 15,
     optimal: { min: 6, max: 9 },
   },
+  primes: {
+    min: 0,
+    max: 9, // Max primes in 1-25 range: 2,3,5,7,11,13,17,19,23
+    optimal: { min: 4, max: 7 },
+  },
 };
+
+// List of prime numbers in Lotofácil range (1-25)
+export const PRIME_NUMBERS = [2, 3, 5, 7, 11, 13, 17, 19, 23];
 
 function isPrime(n: number): boolean {
   return PRIMES.has(n);
@@ -110,6 +128,13 @@ export function filterGames(games: GeneratedGame[], filters: FilterOptions): Gen
     // Filter by parity balance
     if (filters.parityBalance.enabled) {
       if (game.stats.evens < filters.parityBalance.minEvens || game.stats.evens > filters.parityBalance.maxEvens) {
+        return false;
+      }
+    }
+
+    // Filter by primes count
+    if (filters.primesCount.enabled) {
+      if (game.stats.primes < filters.primesCount.min || game.stats.primes > filters.primesCount.max) {
         return false;
       }
     }
@@ -165,6 +190,10 @@ export function getFilterDescription(filters: FilterOptions): string[] {
     const minOdds = 15 - filters.parityBalance.maxEvens;
     const maxOdds = 15 - filters.parityBalance.minEvens;
     descriptions.push(`Pares: ${filters.parityBalance.minEvens}-${filters.parityBalance.maxEvens} | Ímpares: ${minOdds}-${maxOdds}`);
+  }
+
+  if (filters.primesCount.enabled) {
+    descriptions.push(`Primos: ${filters.primesCount.min}-${filters.primesCount.max}`);
   }
   
   return descriptions;

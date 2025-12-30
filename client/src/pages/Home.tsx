@@ -95,6 +95,7 @@ export default function Home() {
     let count = 0;
     if (filters.sumRange.enabled) count++;
     if (filters.parityBalance.enabled) count++;
+    if (filters.primesCount.enabled) count++;
     return count;
   }, [filters]);
 
