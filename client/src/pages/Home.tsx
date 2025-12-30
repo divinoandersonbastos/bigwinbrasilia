@@ -1,7 +1,7 @@
 /*
  * Home Page - Lotofácil Generator
  * Design: Swiss Minimalist Mathematical
- * Features: Number selection, game generation, statistical filters, statistics display
+ * Features: Number selection, game generation, statistical filters, statistics display, history
  */
 
 import { useState, useMemo } from "react";
@@ -11,6 +11,8 @@ import { Badge } from "@/components/ui/badge";
 import { NumberSelector } from "@/components/NumberSelector";
 import { GameCard } from "@/components/GameCard";
 import { FilterPanel } from "@/components/FilterPanel";
+import { HistoryPanel } from "@/components/HistoryPanel";
+import { useHistory, type HistoryEntry } from "@/hooks/useHistory";
 import { 
   generateFilteredGames, 
   calculateCoverage, 
@@ -19,7 +21,7 @@ import {
   DEFAULT_FILTERS,
   getFilterDescription
 } from "@/lib/gameGenerator";
-import { Dices, RotateCcw, Copy, Check, Info, AlertTriangle } from "lucide-react";
+import { Dices, RotateCcw, Copy, Check, Info, AlertTriangle, Save } from "lucide-react";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -30,6 +32,9 @@ export default function Home() {
   const [rejectedCount, setRejectedCount] = useState(0);
   const [filters, setFilters] = useState<FilterOptions>(DEFAULT_FILTERS);
   const [copied, setCopied] = useState(false);
+  const [lastSavedId, setLastSavedId] = useState<string | null>(null);
+
+  const { history, addEntry, removeEntry, clearHistory } = useHistory();
 
   const handleToggle = (num: number) => {
     setSelectedNumbers(prev => {
@@ -42,6 +47,7 @@ export default function Home() {
     setAllGames([]);
     setFilteredGames([]);
     setRejectedCount(0);
+    setLastSavedId(null);
   };
 
   const handleGenerate = () => {
@@ -54,13 +60,24 @@ export default function Home() {
     setAllGames(result.allGames);
     setFilteredGames(result.filteredGames);
     setRejectedCount(result.rejectedCount);
+    setLastSavedId(null);
+    
+    // Auto-save to history
+    const entryId = addEntry(
+      selectedNumbers,
+      result.filteredGames,
+      filters,
+      result.filteredGames.length,
+      result.rejectedCount
+    );
+    setLastSavedId(entryId);
     
     if (result.filteredGames.length === 0) {
       toast.warning("Nenhum jogo passou nos filtros. Tente ajustar os critérios.");
     } else if (result.rejectedCount > 0) {
-      toast.success(`${result.filteredGames.length} jogos aprovados, ${result.rejectedCount} rejeitados pelos filtros`);
+      toast.success(`${result.filteredGames.length} jogos gerados e salvos no histórico`);
     } else {
-      toast.success(`${result.filteredGames.length} jogos gerados com sucesso!`);
+      toast.success(`${result.filteredGames.length} jogos gerados e salvos no histórico!`);
     }
   };
 
@@ -69,6 +86,7 @@ export default function Home() {
     setAllGames([]);
     setFilteredGames([]);
     setRejectedCount(0);
+    setLastSavedId(null);
   };
 
   const handleCopyAll = () => {
@@ -79,6 +97,16 @@ export default function Home() {
     setCopied(true);
     toast.success("Jogos copiados para a área de transferência");
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleLoadEntry = (entry: HistoryEntry) => {
+    setSelectedNumbers(entry.selectedNumbers);
+    setFilters(entry.filters);
+    setAllGames([]);
+    setFilteredGames([]);
+    setRejectedCount(0);
+    setLastSavedId(null);
+    toast.success("Dezenas carregadas! Clique em 'Gerar 6 Jogos' para regenerar.");
   };
 
   const coverage = useMemo(() => {
@@ -185,7 +213,15 @@ export default function Home() {
                 >
                   <div className="flex items-center justify-between mb-4">
                     <div className="space-y-1">
-                      <h2 className="text-xl font-semibold">Jogos Gerados</h2>
+                      <div className="flex items-center gap-2">
+                        <h2 className="text-xl font-semibold">Jogos Gerados</h2>
+                        {lastSavedId && (
+                          <Badge variant="outline" className="text-xs text-green-600 border-green-600">
+                            <Save className="w-3 h-3 mr-1" />
+                            Salvo
+                          </Badge>
+                        )}
+                      </div>
                       {rejectedCount > 0 && (
                         <p className="text-sm text-muted-foreground flex items-center gap-1">
                           <AlertTriangle className="w-3 h-3" />
@@ -249,10 +285,18 @@ export default function Home() {
             </AnimatePresence>
           </div>
 
-          {/* Right Column - Filters & Statistics */}
+          {/* Right Column - Filters, History & Statistics */}
           <aside className="space-y-6">
             {/* Filters Panel */}
             <FilterPanel filters={filters} onFiltersChange={setFilters} />
+
+            {/* History Panel */}
+            <HistoryPanel
+              history={history}
+              onRemoveEntry={removeEntry}
+              onClearHistory={clearHistory}
+              onLoadEntry={handleLoadEntry}
+            />
 
             {/* Removed Numbers */}
             <Card>
@@ -336,8 +380,7 @@ export default function Home() {
                   Os <strong className="text-foreground">filtros estatísticos</strong> permitem refinar os jogos com base em padrões históricos da Lotofácil.
                 </p>
                 <p>
-                  <strong className="text-foreground">Faixa de soma ideal:</strong> 180-220 pontos. 
-                  <strong className="text-foreground"> Paridade ideal:</strong> 6-9 pares.
+                  O <strong className="text-foreground">histórico</strong> salva automaticamente todos os jogos gerados no seu navegador.
                 </p>
               </CardContent>
             </Card>
