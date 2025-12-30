@@ -1,7 +1,7 @@
 /*
  * HistoryPanel Component
  * Design: Swiss Minimalist Mathematical
- * Purpose: Display and manage saved game history
+ * Purpose: Display and manage saved game history with result checking
  */
 
 import { useState } from 'react';
@@ -31,7 +31,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { type HistoryEntry, formatDate, formatTime } from "@/hooks/useHistory";
-import { History, Trash2, Eye, Calendar, Clock, Filter, CheckCircle, XCircle } from "lucide-react";
+import { ResultChecker } from "@/components/ResultChecker";
+import { History, Trash2, Eye, Calendar, Clock, Filter, CheckCircle, XCircle, Trophy } from "lucide-react";
 
 interface HistoryPanelProps {
   history: HistoryEntry[];
@@ -145,6 +146,10 @@ export function HistoryPanel({
                   </div>
                 </div>
                 <div className="flex items-center gap-1 ml-2">
+                  {/* Result Checker Button */}
+                  <ResultChecker entry={entry} />
+                  
+                  {/* View Details Dialog */}
                   <Dialog>
                     <DialogTrigger asChild>
                       <Button
@@ -260,6 +265,8 @@ export function HistoryPanel({
                       </DialogFooter>
                     </DialogContent>
                   </Dialog>
+                  
+                  {/* Delete Button */}
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
                       <Button
